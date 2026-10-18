@@ -4,6 +4,7 @@ var isValidId = require('../utils/ids').isValidId;
 var findMany = require('../utils/query').findMany;
 var handleError = response.handleError;
 var parseSelect = require('../utils/query').parseSelect;
+var validateTaskBody = require('../utils/validate').validateTaskBody;
 
 var send = response.send;
 var serverError = response.serverError;
@@ -49,20 +50,14 @@ module.exports = function (router) {
         }
     });
 
-    // POST /api/tasks: create a task (minimal version, validation comes in Step 6)
+    // POST /api/tasks: create a task
     tasksRoute.post(async function (req, res) {
         try {
-            var task = new Task({
-                name: req.body.name,
-                description: req.body.description,
-                deadline: req.body.deadline,
-                completed: req.body.completed
-            });
-
-            var saved = await task.save();
+            var fields = validateTaskBody(req.body);
+            var saved = await new Task(fields).save();
             return send(res, 201, 'Task created', saved);
         } catch (err) {
-            return serverError(res, err);
+            return handleError(res, err);
         }
     });
 

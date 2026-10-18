@@ -31,7 +31,16 @@ function handleError(res, err) {
     if (err && err.name === 'CastError') {
         return send(res, 400, 'A value in the request has the wrong type or format.', {});
     }
-    
+
+    // MongoDB rejected a duplicate value in a unique field (the user's email)
+    if (err && err.code === 11000) {
+        return send(res, 400, 'A user with this email already exists.', {});
+    }
+    // Mongoose schema validation failed (a safety net behind our own checks)
+    if (err && err.name === 'ValidationError') {
+        return send(res, 400, 'Some fields in the request are missing or invalid.', {});
+    }
+
     // Anything else is unexpected
     return serverError(res, err);
 }

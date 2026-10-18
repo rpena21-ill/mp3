@@ -4,6 +4,7 @@ var isValidId = require('../utils/ids').isValidId;
 var findMany = require('../utils/query').findMany;
 var handleError = response.handleError;
 var parseSelect = require('../utils/query').parseSelect;
+var validateUserBody = require('../utils/validate').validateUserBody;
 
 var send = response.send;
 var serverError = response.serverError;
@@ -49,18 +50,20 @@ module.exports = function (router) {
         }
     });
 
-    // POST /api/users: create a user (minimal version, validation comes in Step 6)
+    // POST /api/users: create a user
     usersRoute.post(async function (req, res) {
         try {
-            var user = new User({
-                name: req.body.name,
-                email: req.body.email
-            });
+            var fields = validateUserBody(req.body);
 
-            var saved = await user.save();
+            var existing = await User.findOne({ email: fields.email });
+            if (existing) {
+                return send(res, 400, 'A user with this email already exists.', {});
+            }
+
+            var saved = await new User(fields).save();
             return send(res, 201, 'User created', saved);
         } catch (err) {
-            return serverError(res, err);
+            return handleError(res, err);
         }
     });
 
