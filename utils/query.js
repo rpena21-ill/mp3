@@ -80,6 +80,7 @@ function parseNonNegativeInt(query, name) {
 }
 
 // Run a find() on the given model using the URL's query parameters.
+// Returns a list of documents, or a number if count=true.
 async function findMany(Model, query, defaultLimit) {
     // ----- where -----
     var where = parseJsonParam(query, 'where');
@@ -93,6 +94,7 @@ async function findMany(Model, query, defaultLimit) {
         if (!isPlainObject(sort)) {
             throw badRequest('The "sort" parameter must be a JSON object.');
         }
+        
         Object.keys(sort).forEach(function (field) {
             if (sort[field] !== 1 && sort[field] !== -1) {
                 throw badRequest('Each field in "sort" must be 1 (ascending) or -1 (descending).');
@@ -105,12 +107,30 @@ async function findMany(Model, query, defaultLimit) {
 
     // ----- skip and limit -----
     var skip = parseNonNegativeInt(query, 'skip');
-    var limit = parseNonNegativeInt(query, 'limit');
-    if (limit === undefined) {
-        limit = defaultLimit;
+    var explicitLimit = parseNonNegativeInt(query, 'limit'); // what the client sent, if anything
+    var limit = explicitLimit === undefined ? defaultLimit : explicitLimit;
+
+    // ----- count -----
+    var count = parseJsonParam(query, 'count');
+    if (count !== undefined && typeof count !== 'boolean') {
+        throw badRequest('The "count" parameter must be true or false.');
     }
 
-    // ----- build the query step by step, then run it -----
+    // ----- count=true: return a number instead of documents -----
+    if (count === true) {
+        var countQuery = Model.countDocuments(where || {});
+        if (skip !== undefined) {
+            countQuery = countQuery.skip(skip);
+        }
+
+        if (explicitLimit !== undefined && explicitLimit > 0) {
+            countQuery = countQuery.limit(explicitLimit);
+        }
+
+        return countQuery.exec();
+    }
+
+    // ----- otherwise: build the find query step by step, then run it -----
     var dbQuery = Model.find(where || {});
     if (sort !== undefined) {
         dbQuery = dbQuery.sort(sort);
@@ -118,7 +138,6 @@ async function findMany(Model, query, defaultLimit) {
     if (select !== undefined) {
         dbQuery = dbQuery.select(select);
     }
-    
     if (skip !== undefined) {
         dbQuery = dbQuery.skip(skip);
     }
