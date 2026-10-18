@@ -3,6 +3,7 @@ var response = require('../utils/response');
 var isValidId = require('../utils/ids').isValidId;
 var findMany = require('../utils/query').findMany;
 var handleError = response.handleError;
+var parseSelect = require('../utils/query').parseSelect;
 
 var send = response.send;
 var serverError = response.serverError;
@@ -15,7 +16,7 @@ module.exports = function (router) {
     // GET /api/tasks: list tasks (supports query parameters)
     tasksRoute.get(async function (req, res) {
         try {
-            var tasks = await findMany(Task, req.query);
+            var tasks = await findMany(Task, req.query, 100);
             return send(res, 200, 'OK', tasks);
         } catch (err) {
             return handleError(res, err);
@@ -25,21 +26,26 @@ module.exports = function (router) {
     // ----- /api/tasks/:id -----
     var taskRoute = router.route('/tasks/:id');
 
-    // GET /api/tasks/:id: one task, or 404
+    // GET /api/tasks/:id: one user, or 404 (supports select)
     taskRoute.get(async function (req, res) {
         try {
             if (!isValidId(req.params.id)) {
-                return send(res, 404, 'Task not found', {});
+                return send(res, 404, 'User not found', {});
             }
+            var select = parseSelect(req.query);
 
-            var task = await Task.findById(req.params.id);
+            var dbQuery = User.findById(req.params.id);
+            if (select !== undefined) {
+                dbQuery = dbQuery.select(select);
+            }
+            var user = await dbQuery.exec();
+
             if (!task) {
                 return send(res, 404, 'Task not found', {});
             }
-
-            return send(res, 200, 'OK', task);
+            return send(res, 200, 'OK', user);
         } catch (err) {
-            return serverError(res, err);
+            return handleError(res, err);
         }
     });
 
