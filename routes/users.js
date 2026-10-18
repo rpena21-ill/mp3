@@ -6,6 +6,7 @@ var findMany = require('../utils/query').findMany;
 var handleError = response.handleError;
 var parseSelect = require('../utils/query').parseSelect;
 var validateUserBody = require('../utils/validate').validateUserBody;
+var references = require('../utils/references');
 
 var send = response.send;
 var serverError = response.serverError;
@@ -51,7 +52,7 @@ module.exports = function (router) {
         }
     });
 
-    // PUT /api/users/:id: replace a user
+    // PUT /api/users/:id: replace a user (and update their tasks to match)
     userRoute.put(async function (req, res) {
         try {
             // 1. URL id must point to an existing user
@@ -63,21 +64,25 @@ module.exports = function (router) {
                 return send(res, 404, 'User not found', {});
             }
 
-            // 2. Body must be valid
+            // 2. Body format and duplicate email (400)
             var fields = validateUserBody(req.body);
-
-            // The email can't belong to a *different* user
             var emailOwner = await User.findOne({ email: fields.email, _id: { $ne: user._id } });
             if (emailOwner) {
                 return send(res, 400, 'A user with this email already exists.', {});
             }
 
-            // 3. Replace the fields (dateCreated is never touched)
+            // 3-4. Referenced tasks exist (404) and are not completed (400)
+            await references.checkPendingTasks(fields.pendingTasks);
+
+            // Remember the old list before overwriting it
+            var oldPendingTasks = user.pendingTasks.map(String);
+
             user.name = fields.name;
             user.email = fields.email;
-            // pendingTasks is handled in Step 9 (two-way references)
-
+            user.pendingTasks = fields.pendingTasks;
             var saved = await user.save();
+
+            await references.syncUserToTasks(saved, oldPendingTasks);
             return send(res, 200, 'User updated', saved);
         } catch (err) {
             return handleError(res, err);
@@ -108,17 +113,20 @@ module.exports = function (router) {
         }
     });
 
-    // POST /api/users: create a user
+    // POST /api/users: create a user (and assign the tasks in pendingTasks to them)
     usersRoute.post(async function (req, res) {
         try {
-            var fields = validateUserBody(req.body);
+            var fields = validateUserBody(req.body); // 400: format
 
             var existing = await User.findOne({ email: fields.email });
             if (existing) {
                 return send(res, 400, 'A user with this email already exists.', {});
             }
 
+            await references.checkPendingTasks(fields.pendingTasks); // 404 / 400
+
             var saved = await new User(fields).save();
+            await references.syncUserToTasks(saved, []); // new user: no previous tasks
             return send(res, 201, 'User created', saved);
         } catch (err) {
             return handleError(res, err);

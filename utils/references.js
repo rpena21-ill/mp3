@@ -1,5 +1,6 @@
 // Keeping tasks and users consistent with each other (two-way references).
 var User = require('../models/user');
+var Task = require('../models/task');
 var isValidId = require('./ids').isValidId;
 var query = require('./query');
 var badRequest = query.badRequest;
@@ -37,4 +38,62 @@ async function syncTaskToUsers(task, oldAssignedUser) {
     }
 }
 
-module.exports = { resolveAssignedUser: resolveAssignedUser, syncTaskToUsers: syncTaskToUsers };
+// Check that every id in pendingTasks is an existing, not-completed task.
+async function checkPendingTasks(taskIds) {
+    if (taskIds.length === 0) {
+        return;
+    }
+    var tasks = await Task.find({ _id: { $in: taskIds } });
+    if (tasks.length !== taskIds.length) {
+        throw notFound('One or more tasks in "pendingTasks" do not exist.');
+    }
+    var hasCompleted = tasks.some(function (task) { return task.completed; });
+    if (hasCompleted) {
+        throw badRequest('"pendingTasks" cannot contain completed tasks.');
+    }
+}
+
+// After a user was saved, update the tasks so they agree with the user.
+// oldPendingTasks is the user's pendingTasks before this request ([] for a new user).
+async function syncUserToTasks(user, oldPendingTasks) {
+    var userId = String(user._id);
+    var newIds = user.pendingTasks.map(String);
+    var removed = oldPendingTasks.filter(function (id) {
+        return newIds.indexOf(id) === -1;
+    });
+
+    // 1. Tasks the user no longer has become unassigned
+    if (removed.length > 0) {
+        await Task.updateMany(
+            { _id: { $in: removed }, assignedUser: userId },
+            { $set: { assignedUser: '', assignedUserName: 'unassigned' } }
+        );
+    }
+
+    if (newIds.length > 0) {
+        // 2. Take these tasks away from any other user that has them
+        await User.updateMany(
+            { _id: { $ne: user._id }, pendingTasks: { $in: newIds } },
+            { $pull: { pendingTasks: { $in: newIds } } }
+        );
+
+        // 3. Assign them to this user
+        await Task.updateMany(
+            { _id: { $in: newIds } },
+            { $set: { assignedUser: userId, assignedUserName: user.name } }
+        );
+    }
+
+    // 4. Every task of this user (completed ones too) shows the current name
+    await Task.updateMany(
+        { assignedUser: userId },
+        { $set: { assignedUserName: user.name } }
+    );
+}
+
+module.exports = {
+    resolveAssignedUser: resolveAssignedUser,
+    syncTaskToUsers: syncTaskToUsers,
+    checkPendingTasks: checkPendingTasks,
+    syncUserToTasks: syncUserToTasks
+};
