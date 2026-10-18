@@ -50,6 +50,39 @@ module.exports = function (router) {
         }
     });
 
+    // PUT /api/users/:id: replace a user
+    userRoute.put(async function (req, res) {
+        try {
+            // 1. URL id must point to an existing user
+            if (!isValidId(req.params.id)) {
+                return send(res, 404, 'User not found', {});
+            }
+            var user = await User.findById(req.params.id);
+            if (!user) {
+                return send(res, 404, 'User not found', {});
+            }
+
+            // 2. Body must be valid
+            var fields = validateUserBody(req.body);
+
+            // The email can't belong to a *different* user
+            var emailOwner = await User.findOne({ email: fields.email, _id: { $ne: user._id } });
+            if (emailOwner) {
+                return send(res, 400, 'A user with this email already exists.', {});
+            }
+
+            // 3. Replace the fields (dateCreated is never touched)
+            user.name = fields.name;
+            user.email = fields.email;
+            // pendingTasks is handled in Step 9 (two-way references)
+
+            var saved = await user.save();
+            return send(res, 200, 'User updated', saved);
+        } catch (err) {
+            return handleError(res, err);
+        }
+    });
+
     // POST /api/users: create a user
     usersRoute.post(async function (req, res) {
         try {
