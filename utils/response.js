@@ -21,9 +21,9 @@ function serverError(res, err) {
 
 // Pick the right status code for an error, then send it.
 function handleError(res, err) {
-    // Errors we created ourselves with badRequest()
-    if (err && err.status === 400) {
-        return send(res, 400, err.message, {});
+    // Errors we created ourselves with badRequest() or notFound()
+    if (err && (err.status === 400 || err.status === 404)) {
+        return send(res, err.status, err.message, {});
     }
 
     // Mongoose could not convert a value to the right type,

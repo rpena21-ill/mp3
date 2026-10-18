@@ -6,11 +6,22 @@ var findMany = require('../utils/query').findMany;
 var handleError = response.handleError;
 var parseSelect = require('../utils/query').parseSelect;
 var validateTaskBody = require('../utils/validate').validateTaskBody;
+var references = require('../utils/references');
 
 var send = response.send;
 var serverError = response.serverError;
 
 module.exports = function (router) {
+    // Copy validated fields onto a task document.
+    // user is the assigned user document, or null for unassigned.
+    function applyTaskFields(task, fields, user) {
+        task.name = fields.name;
+        task.description = fields.description;
+        task.deadline = fields.deadline;
+        task.completed = fields.completed;
+        task.assignedUser = user ? String(user._id) : '';
+        task.assignedUserName = user ? user.name : 'unassigned';
+    }
 
     // ----- /api/tasks -----
     var tasksRoute = router.route('/tasks');
@@ -51,7 +62,7 @@ module.exports = function (router) {
         }
     });
 
-    // PUT /api/tasks/:id: replace a task
+    // PUT /api/tasks/:id: replace a task (and keep users' pendingTasks in sync)
     taskRoute.put(async function (req, res) {
         try {
             // 1. URL id must point to an existing task
@@ -63,17 +74,17 @@ module.exports = function (router) {
                 return send(res, 404, 'Task not found', {});
             }
 
-            // 2. Body must be valid (missing optional fields get their defaults)
+            // 2-4. Body format, then referenced user
             var fields = validateTaskBody(req.body);
+            var user = await references.resolveAssignedUser(fields);
 
-            // 3. Replace the fields (dateCreated is never touched)
-            task.name = fields.name;
-            task.description = fields.description;
-            task.deadline = fields.deadline;
-            task.completed = fields.completed;
-            // assignedUser / assignedUserName are handled in Step 9
+            // Remember the previous user before overwriting
+            var oldAssignedUser = task.assignedUser;
 
+            applyTaskFields(task, fields, user);
             var saved = await task.save();
+
+            await references.syncTaskToUsers(saved, oldAssignedUser);
             return send(res, 200, 'Task updated', saved);
         } catch (err) {
             return handleError(res, err);
@@ -106,11 +117,17 @@ module.exports = function (router) {
         }
     });
 
-    // POST /api/tasks: create a task
+    // POST /api/tasks: create a task (and add it to its user's pendingTasks)
     tasksRoute.post(async function (req, res) {
         try {
-            var fields = validateTaskBody(req.body);
-            var saved = await new Task(fields).save();
+            var fields = validateTaskBody(req.body);                 // 400 checks
+            var user = await references.resolveAssignedUser(fields); // 404 / 400 checks
+
+            var task = new Task();
+            applyTaskFields(task, fields, user);
+            var saved = await task.save();
+
+            await references.syncTaskToUsers(saved, ''); // new task: no previous user
             return send(res, 201, 'Task created', saved);
         } catch (err) {
             return handleError(res, err);

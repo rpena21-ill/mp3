@@ -8,6 +8,13 @@ function badRequest(message) {
     return err;
 }
 
+// Create an error that should be sent to the client as a 404.
+function notFound(message) {
+    var err = new Error(message);
+    err.status = 404;
+    return err;
+}
+
 // Read one query string parameter and parse it as JSON.
 // Returns undefined if the parameter is not in the URL.
 function parseJsonParam(query, name) {
@@ -94,7 +101,7 @@ async function findMany(Model, query, defaultLimit) {
         if (!isPlainObject(sort)) {
             throw badRequest('The "sort" parameter must be a JSON object.');
         }
-        
+
         Object.keys(sort).forEach(function (field) {
             if (sort[field] !== 1 && sort[field] !== -1) {
                 throw badRequest('Each field in "sort" must be 1 (ascending) or -1 (descending).');
@@ -148,4 +155,4 @@ async function findMany(Model, query, defaultLimit) {
     return dbQuery.exec();
 }
 
-module.exports = { findMany: findMany, badRequest: badRequest, parseSelect: parseSelect };
+module.exports = { findMany: findMany, badRequest: badRequest, notFound: notFound, parseSelect: parseSelect };

@@ -1,6 +1,8 @@
 // Validation for request bodies of POST and PUT on users and tasks.
 var badRequest = require('./query').badRequest;
 
+var isValidId = require('./ids').isValidId;
+
 // True for a string with at least one non-space character.
 function isNonEmptyString(value) {
     return typeof value === 'string' && value.trim() !== '';
@@ -69,7 +71,41 @@ function validateTaskBody(body) {
         completed = parseBoolean(body.completed, 'completed');
     }
 
-    return { name: body.name, description: description, deadline: deadline, completed: completed };
+    // assignedUser: "" means unassigned, otherwise it must be a valid id
+    var assignedUser = '';
+    if (body.assignedUser !== undefined && body.assignedUser !== null) {
+        if (typeof body.assignedUser !== 'string') {
+            throw badRequest('"assignedUser" must be a user id, or "" for no user.');
+        }
+        assignedUser = body.assignedUser;
+        if (assignedUser !== '' && !isValidId(assignedUser)) {
+            throw badRequest('"assignedUser" is not a valid user id.');
+        }
+    }
+
+    // assignedUserName: optional (undefined = not given, we fill it in later)
+    var assignedUserName;
+    if (body.assignedUserName !== undefined && body.assignedUserName !== null) {
+        if (typeof body.assignedUserName !== 'string') {
+            throw badRequest('"assignedUserName" must be text.');
+        }
+        assignedUserName = body.assignedUserName;
+    }
+
+    // An unassigned task can't claim to belong to someone
+    if (assignedUser === '' && assignedUserName !== undefined &&
+        assignedUserName !== 'unassigned' && assignedUserName !== '') {
+        throw badRequest('An unassigned task must have "assignedUserName" set to "unassigned".');
+    }
+
+    return {
+        name: body.name,
+        description: description,
+        deadline: deadline,
+        completed: completed,
+        assignedUser: assignedUser,
+        assignedUserName: assignedUserName
+    };
 }
 
 module.exports = { validateUserBody: validateUserBody, validateTaskBody: validateTaskBody };
