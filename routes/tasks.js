@@ -1,3 +1,4 @@
+var User = require('../models/user');
 var Task = require('../models/task');
 var response = require('../utils/response');
 var isValidId = require('../utils/ids').isValidId;
@@ -74,6 +75,32 @@ module.exports = function (router) {
 
             var saved = await task.save();
             return send(res, 200, 'Task updated', saved);
+        } catch (err) {
+            return handleError(res, err);
+        }
+    });
+
+    // DELETE /api/tasks/:id: delete a task and remove it from its user's pendingTasks
+    taskRoute.delete(async function (req, res) {
+        try {
+            if (!isValidId(req.params.id)) {
+                return send(res, 404, 'Task not found', {});
+            }
+            var task = await Task.findById(req.params.id);
+            if (!task) {
+                return send(res, 404, 'Task not found', {});
+            }
+
+            // Keep the two-way reference: the user must no longer list this task
+            if (isValidId(task.assignedUser)) {
+                await User.updateOne(
+                    { _id: task.assignedUser },
+                    { $pull: { pendingTasks: String(task._id) } }
+                );
+            }
+
+            await task.deleteOne();
+            return send(res, 204, 'Task deleted', {});
         } catch (err) {
             return handleError(res, err);
         }

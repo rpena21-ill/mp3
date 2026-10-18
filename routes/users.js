@@ -1,4 +1,5 @@
 var User = require('../models/user');
+var Task = require('../models/task');
 var response = require('../utils/response');
 var isValidId = require('../utils/ids').isValidId;
 var findMany = require('../utils/query').findMany;
@@ -78,6 +79,30 @@ module.exports = function (router) {
 
             var saved = await user.save();
             return send(res, 200, 'User updated', saved);
+        } catch (err) {
+            return handleError(res, err);
+        }
+    });
+
+    // DELETE /api/users/:id: delete a user and unassign all their tasks
+    userRoute.delete(async function (req, res) {
+        try {
+            if (!isValidId(req.params.id)) {
+                return send(res, 404, 'User not found', {});
+            }
+            var user = await User.findById(req.params.id);
+            if (!user) {
+                return send(res, 404, 'User not found', {});
+            }
+
+            // Keep the two-way reference: no task may still point to this user
+            await Task.updateMany(
+                { assignedUser: String(user._id) },
+                { $set: { assignedUser: '', assignedUserName: 'unassigned' } }
+            );
+
+            await user.deleteOne();
+            return send(res, 204, 'User deleted', {});
         } catch (err) {
             return handleError(res, err);
         }
