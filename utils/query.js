@@ -15,7 +15,7 @@ function parseJsonParam(query, name) {
     if (raw === undefined) {
         return undefined;
     }
-    
+
     try {
         return JSON.parse(raw);
     } catch (e) {
@@ -30,12 +30,33 @@ function isPlainObject(value) {
 
 // Run a find() on the given model using the URL's query parameters.
 async function findMany(Model, query) {
+    // ----- where -----
     var where = parseJsonParam(query, 'where');
     if (where !== undefined && !isPlainObject(where)) {
         throw badRequest('The "where" parameter must be a JSON object.');
     }
 
-    return Model.find(where || {});
+    // ----- sort -----
+    var sort = parseJsonParam(query, 'sort');
+    if (sort !== undefined) {
+        if (!isPlainObject(sort)) {
+            throw badRequest('The "sort" parameter must be a JSON object.');
+        }
+        
+        Object.keys(sort).forEach(function (field) {
+            if (sort[field] !== 1 && sort[field] !== -1) {
+                throw badRequest('Each field in "sort" must be 1 (ascending) or -1 (descending).');
+            }
+        });
+    }
+
+    // ----- build the query step by step, then run it -----
+    var dbQuery = Model.find(where || {});
+    if (sort !== undefined) {
+        dbQuery = dbQuery.sort(sort);
+    }
+
+    return dbQuery.exec();
 }
 
 module.exports = { findMany: findMany, badRequest: badRequest };
