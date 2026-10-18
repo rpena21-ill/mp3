@@ -1,6 +1,8 @@
 var Task = require('../models/task');
 var response = require('../utils/response');
 var isValidId = require('../utils/ids').isValidId;
+var findMany = require('../utils/query').findMany;
+var handleError = response.handleError;
 
 var send = response.send;
 var serverError = response.serverError;
@@ -10,13 +12,13 @@ module.exports = function (router) {
     // ----- /api/tasks -----
     var tasksRoute = router.route('/tasks');
 
-    // GET /api/tasks: list all tasks
+    // GET /api/tasks: list tasks (supports query parameters)
     tasksRoute.get(async function (req, res) {
         try {
-            var tasks = await Task.find();
+            var tasks = await findMany(Task, req.query);
             return send(res, 200, 'OK', tasks);
         } catch (err) {
-            return serverError(res, err);
+            return handleError(res, err);
         }
     });
 
@@ -50,7 +52,7 @@ module.exports = function (router) {
                 deadline: req.body.deadline,
                 completed: req.body.completed
             });
-            
+
             var saved = await task.save();
             return send(res, 201, 'Task created', saved);
         } catch (err) {

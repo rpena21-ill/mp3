@@ -1,6 +1,8 @@
 var User = require('../models/user');
 var response = require('../utils/response');
 var isValidId = require('../utils/ids').isValidId;
+var findMany = require('../utils/query').findMany;
+var handleError = response.handleError;
 
 var send = response.send;
 var serverError = response.serverError;
@@ -10,13 +12,13 @@ module.exports = function (router) {
     // ----- /api/users -----
     var usersRoute = router.route('/users');
 
-    // GET /api/users: list all users
+    // GET /api/users: list users (supports query parameters)
     usersRoute.get(async function (req, res) {
         try {
-            var users = await User.find();
+            var users = await findMany(User, req.query);
             return send(res, 200, 'OK', users);
         } catch (err) {
-            return serverError(res, err);
+            return handleError(res, err);
         }
     });
 
@@ -48,7 +50,7 @@ module.exports = function (router) {
                 name: req.body.name,
                 email: req.body.email
             });
-            
+
             var saved = await user.save();
             return send(res, 201, 'User created', saved);
         } catch (err) {
