@@ -34,8 +34,23 @@ module.exports = function (router) {
             if (!user) {
                 return send(res, 404, 'User not found', {});
             }
-            
+
             return send(res, 200, 'OK', user);
+        } catch (err) {
+            return serverError(res, err);
+        }
+    });
+
+    // POST /api/users: create a user (minimal version, validation comes in Step 6)
+    usersRoute.post(async function (req, res) {
+        try {
+            var user = new User({
+                name: req.body.name,
+                email: req.body.email
+            });
+            
+            var saved = await user.save();
+            return send(res, 201, 'User created', saved);
         } catch (err) {
             return serverError(res, err);
         }
