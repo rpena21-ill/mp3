@@ -39,24 +39,24 @@ module.exports = function (router) {
     // ----- /api/tasks/:id -----
     var taskRoute = router.route('/tasks/:id');
 
-    // GET /api/tasks/:id: one user, or 404 (supports select)
+        // GET /api/tasks/:id: one task, or 404 (supports select)
     taskRoute.get(async function (req, res) {
         try {
             if (!isValidId(req.params.id)) {
-                return send(res, 404, 'User not found', {});
+                return send(res, 404, 'Task not found', {});
             }
             var select = parseSelect(req.query);
 
-            var dbQuery = User.findById(req.params.id);
+            var dbQuery = Task.findById(req.params.id);
             if (select !== undefined) {
                 dbQuery = dbQuery.select(select);
             }
-            var user = await dbQuery.exec();
+            var task = await dbQuery.exec();
 
             if (!task) {
                 return send(res, 404, 'Task not found', {});
             }
-            return send(res, 200, 'OK', user);
+            return send(res, 200, 'OK', task);
         } catch (err) {
             return handleError(res, err);
         }
