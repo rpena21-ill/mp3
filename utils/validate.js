@@ -44,7 +44,28 @@ function validateUserBody(body) {
     if (!isNonEmptyString(body.email)) {
         throw badRequest('A user must have an email.');
     }
-    return { name: body.name, email: body.email };
+
+    // pendingTasks: a list of task ids (missing means an empty list)
+    var pendingTasks = [];
+    if (body.pendingTasks !== undefined && body.pendingTasks !== null) {
+        var list = body.pendingTasks;
+        // Form data sends a single value as a plain string
+        if (typeof list === 'string') {
+            list = list === '' ? [] : [list];
+        }
+        if (!Array.isArray(list)) {
+            throw badRequest('"pendingTasks" must be a list of task ids.');
+        }
+        list.forEach(function (id) {
+            if (typeof id !== 'string' || !isValidId(id)) {
+                throw badRequest('"pendingTasks" contains an invalid task id.');
+            }
+        });
+        // Remove duplicates: the same task listed twice is still one task
+        pendingTasks = Array.from(new Set(list));
+    }
+
+    return { name: body.name, email: body.email, pendingTasks: pendingTasks };
 }
 
 // Check a task body and return only the fields we allow, with defaults filled in.
@@ -98,27 +119,14 @@ function validateTaskBody(body) {
         throw badRequest('An unassigned task must have "assignedUserName" set to "unassigned".');
     }
 
-    // pendingTasks: a list of task ids (missing means an empty list)
-    var pendingTasks = [];
-    if (body.pendingTasks !== undefined && body.pendingTasks !== null) {
-        var list = body.pendingTasks;
-        // Form data sends a single value as a plain string
-        if (typeof list === 'string') {
-            list = list === '' ? [] : [list];
-        }
-        if (!Array.isArray(list)) {
-            throw badRequest('"pendingTasks" must be a list of task ids.');
-        }
-        list.forEach(function (id) {
-            if (typeof id !== 'string' || !isValidId(id)) {
-                throw badRequest('"pendingTasks" contains an invalid task id.');
-            }
-        });
-        // Remove duplicates: the same task listed twice is still one task
-        pendingTasks = Array.from(new Set(list));
-    }
-
-    return { name: body.name, email: body.email, pendingTasks: pendingTasks };
+    return {
+        name: body.name,
+        description: description,
+        deadline: deadline,
+        completed: completed,
+        assignedUser: assignedUser,
+        assignedUserName: assignedUserName
+    };
 }
 
 module.exports = { validateUserBody: validateUserBody, validateTaskBody: validateTaskBody };
